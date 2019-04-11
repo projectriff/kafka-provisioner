@@ -17,13 +17,16 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/Shopify/sarama"
 )
 
 var (
-	config = sarama.NewConfig()
+	config  = sarama.NewConfig()
+	gateway = os.Getenv("GATEWAY")
 )
 
 func main() {
@@ -46,5 +49,7 @@ func handlePut(w http.ResponseWriter, r *http.Request, admin sarama.ClusterAdmin
 	topicName := r.URL.Path[1:]
 	topicDetail := sarama.TopicDetail{NumPartitions: 1, ReplicationFactor: 1}
 	admin.CreateTopic(topicName, &topicDetail, false)
-	w.WriteHeader(200)
+	w.WriteHeader(201)
+	response := fmt.Sprintf("{\"gateway\":\"%s\",\"topic\":\"%s\"}", gateway, topicName)
+	w.Write([]byte(response))
 }
