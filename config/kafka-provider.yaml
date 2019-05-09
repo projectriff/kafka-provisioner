@@ -31,6 +31,8 @@ spec:
         env:
         - name: GATEWAY
           value: liiklus.default.svc.cluster.local:6565
+        - name: BROKER
+          value: kafkabroker:9092
 
 ---
 apiVersion: v1

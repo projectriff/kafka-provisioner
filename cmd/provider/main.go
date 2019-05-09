@@ -27,11 +27,12 @@ import (
 var (
 	config  = sarama.NewConfig()
 	gateway = os.Getenv("GATEWAY")
+	broker = os.Getenv("BROKER")
 )
 
 func main() {
 	config.Version = sarama.V0_11_0_0
-	admin, err := sarama.NewClusterAdmin([]string{"kafka:9092"}, config)
+	admin, err := sarama.NewClusterAdmin([]string{broker}, config)
 	if err != nil {
 		panic(err)
 	}
