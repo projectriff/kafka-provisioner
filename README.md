@@ -1,4 +1,4 @@
-# kafka-gateway
+# kafka-provider
 
 (work-in-progress)
 
