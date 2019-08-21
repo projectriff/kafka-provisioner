@@ -27,7 +27,7 @@ spec:
     spec:
       containers:
       - name: main
-        image: github.com/projectriff/kafka-gateway/cmd/provider
+        image: github.com/projectriff/kafka-provider/cmd/provider
         env:
         - name: GATEWAY
           value: liiklus.default.svc.cluster.local:6565

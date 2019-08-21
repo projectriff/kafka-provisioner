@@ -5,7 +5,7 @@
 deploy the kafka-provider:
 
 ```
-ko apply -f config/
+GO111MODULE=on ko apply -f config/
 ```
 
 forward localhost port 8080 to the deployment:
