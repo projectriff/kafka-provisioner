@@ -1,0 +1,35 @@
+name: Continuous Integration
+on: push
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Set up Golang
+      uses: actions/setup-go@v1
+      with:
+        go-version: '1.12'
+    # TODO remove after https://github.com/actions/setup-go/issues/14
+    - name: Add GOPATH/bin to PATH
+      shell: bash
+      run: |
+        echo "##[set-env name=GOPATH;]$(go env GOPATH)"
+        echo "##[add-path]$(go env GOPATH)/bin"
+    - name: Install ko
+      run: go get github.com/google/ko/cmd/ko
+    - name: Check out code
+      uses: actions/checkout@v1
+    - name: Build using ko
+      run: ko resolve -L -f config/ > /dev/null
+#    - name: Set up GCloud
+#      uses: actions/gcloud/auth@6a43f01e0e930f639b90eec0670e88ba3ec4aba3
+#      env:
+#        GCLOUD_AUTH: ${{ secrets.GCloudAuth }}
+#    - name: Set up GCloud Docker
+#      uses: actions/gcloud/cli@6a43f01e0e930f639b90eec0670e88ba3ec4aba3
+#      with:
+#        args: auth configure-docker
+    - name: Deploy
+      run: ${GITHUB_WORKSPACE}/.github/workflows/release.sh
+      env:
+        GCLOUD_CLIENT_SECRET: ${{ secrets.GCloudAuth }}
