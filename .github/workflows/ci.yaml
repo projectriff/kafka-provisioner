@@ -20,7 +20,7 @@ jobs:
     - name: Check out code
       uses: actions/checkout@v1
     - name: Build using ko
-      run: ko resolve -L -f config/ > /dev/null
+      run: ko publish -L github.com/projectriff/kafka-provider/cmd/provider
 #    - name: Set up GCloud
 #      uses: actions/gcloud/auth@6a43f01e0e930f639b90eec0670e88ba3ec4aba3
 #      env:

@@ -20,17 +20,5 @@ readonly git_branch=${GITHUB_REF:11} # drop 'refs/head/' prefix
 readonly git_timestamp=$(TZ=UTC git show --quiet --date='format-local:%Y%m%d%H%M%S' --format="%cd")
 readonly slug=${version}-${git_timestamp}-${GITHUB_SHA:0:16}
 
-echo "Building riff kafka provider"
-(cd $root && KO_DOCKER_REPO="gcr.io/projectriff/kafka-provider" ko resolve -P -t "${version}" -t "${slug}" -f config/ | \
-  sed -e "s|projectriff.io/release: devel|projectriff.io/release: \"${version}\"|" > ${root}/riff-kafka-provider.yaml)
-
 echo "Publishing riff kafka provider"
-gsutil cp -a public-read ${root}/riff-kafka-provider.yaml gs://projectriff/kafka-provider/snapshots/riff-kafka-provider-${slug}.yaml
-gsutil cp -a public-read ${root}/riff-kafka-provider.yaml gs://projectriff/kafka-provider/riff-kafka-provider-${version}.yaml
-
-echo "Publishing version references"
-gsutil -h 'Content-Type: text/plain' -h 'Cache-Control: private' cp -a public-read <(echo "${slug}") gs://projectriff/kafka-provider/snapshots/versions/${git_branch}
-gsutil -h 'Content-Type: text/plain' -h 'Cache-Control: private' cp -a public-read <(echo "${slug}") gs://projectriff/kafka-provider/snapshots/versions/${version}
-if [[ ${version} != *"-snapshot" ]] ; then
-  gsutil -h 'Content-Type: text/plain' -h 'Cache-Control: private' cp -a public-read <(echo "${version}") gs://projectriff/kafka-provider/versions/releases/${git_branch}
-fi
+(cd $root && KO_DOCKER_REPO="gcr.io/projectriff/kafka-provider" ko publish -t "${version}" -t "${slug}" github.com/projectriff/kafka-provider/cmd/provider)
