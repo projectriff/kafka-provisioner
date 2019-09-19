@@ -1,4 +1,4 @@
-module github.com/projectriff/kafka-provider
+module github.com/projectriff/kafka-provisioner
 
 go 1.12
 

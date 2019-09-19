@@ -20,5 +20,5 @@ readonly git_branch=${GITHUB_REF:11} # drop 'refs/head/' prefix
 readonly git_timestamp=$(TZ=UTC git show --quiet --date='format-local:%Y%m%d%H%M%S' --format="%cd")
 readonly slug=${version}-${git_timestamp}-${GITHUB_SHA:0:16}
 
-echo "Publishing riff kafka provider"
-(cd $root && KO_DOCKER_REPO="gcr.io/projectriff/kafka-provider" ko publish -t "${version}" -t "${slug}" github.com/projectriff/kafka-provider/cmd/provider)
+echo "Publishing riff kafka provisioner"
+(cd $root && KO_DOCKER_REPO="gcr.io/projectriff/kafka-provisioner" ko publish -t "${version}" -t "${slug}" github.com/projectriff/kafka-provisioner/cmd/provisioner)
