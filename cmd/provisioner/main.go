@@ -109,7 +109,7 @@ func handlePut(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprintf(os.Stderr, "Failed to write json response: %v", err)
 		return
 	} else {
-		_, _ = fmt.Fprintf(os.Stderr, "Reported succesful topic %q\n", topicName)
+		_, _ = fmt.Fprintf(os.Stderr, "Reported successful topic %q\n", topicName)
 	}
 }
 
