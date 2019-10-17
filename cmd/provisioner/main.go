@@ -19,16 +19,14 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/Shopify/sarama"
 	"log"
 	"net/http"
 	"os"
 	"strings"
-
-	"github.com/Shopify/sarama"
 )
 
 var (
-	config  = sarama.NewConfig()
 	gateway = os.Getenv("GATEWAY")
 	broker  = os.Getenv("BROKER")
 )
@@ -42,14 +40,11 @@ func main() {
 		log.Fatal("Environment variable BROKER should contain the host and port of a Kafka broker")
 	}
 
-	config.Version = sarama.V0_11_0_0
-	admin, err := sarama.NewClusterAdmin([]string{broker}, config)
-	if err != nil {
-		panic(err)
-	}
+	sarama.Logger = log.New(os.Stdout, "[Sarama] ", log.LstdFlags)
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPut {
-			handlePut(w, r, admin)
+			handlePut(w, r)
 		} else {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
@@ -57,13 +52,31 @@ func main() {
 	http.ListenAndServe(":8080", nil)
 }
 
-func handlePut(w http.ResponseWriter, r *http.Request, admin sarama.ClusterAdmin) {
+func handlePut(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(r.URL.Path[1:], "/")
 	if len(parts) != 2 {
 		w.WriteHeader(http.StatusBadRequest)
-		_, _ = fmt.Fprintf(w, "URLs should be of the form /<namespace>/<stream-name>")
+		_, _ = fmt.Fprintf(w, "URLs should be of the form /<namespace>/<stream-name>\n")
 		return
 	}
+
+	config := sarama.NewConfig()
+	config.Version = sarama.V0_11_0_0
+	config.ClientID = "kafka-provisioner"
+	admin, err := sarama.NewClusterAdmin([]string{broker}, config)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = fmt.Fprintf(os.Stderr, "Error connecting to Kafka broker %q: %v\n", broker, err)
+		_, _ = fmt.Fprintf(w, "Error connecting to Kafka broker %q: %v\n", broker, err)
+		return
+	} else {
+		defer func() {
+			if err := admin.Close() ; err != nil {
+				_, _ = fmt.Fprintf(os.Stderr, "Error disconnecting from Kafka broker %q: %v\n", broker, err)
+			}
+		}()
+	}
+
 	// NOTE: choice of underscore as separator is important as it is not allowed in k8s names
 	topicName := fmt.Sprintf("%s_%s", parts[0], parts[1])
 	topicDetail := sarama.TopicDetail{NumPartitions: 1, ReplicationFactor: 1}
@@ -71,6 +84,7 @@ func handlePut(w http.ResponseWriter, r *http.Request, admin sarama.ClusterAdmin
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = fmt.Fprintf(os.Stderr, "Error trying to list topics to see if %q exists: %v\n", topicName, err)
 		_, _ = fmt.Fprintf(w, "Error trying to list topics to see if %q exists: %v\n", topicName, err)
+		return
 	} else if metadata[0].Err == sarama.ErrUnknownTopicOrPartition {
 		if err := admin.CreateTopic(topicName, &topicDetail, false); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -92,8 +106,10 @@ func handlePut(w http.ResponseWriter, r *http.Request, admin sarama.ClusterAdmin
 	w.Header().Set("Content-Type", "application/json")
 	res := result{Gateway: gateway, Topic: topicName}
 	if err := json.NewEncoder(w).Encode(res); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "failed to write json response: %v", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Failed to write json response: %v", err)
 		return
+	} else {
+		_, _ = fmt.Fprintf(os.Stderr, "Reported succesful topic %q\n", topicName)
 	}
 }
 
