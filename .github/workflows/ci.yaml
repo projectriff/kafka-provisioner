@@ -19,6 +19,9 @@ jobs:
       run: go get github.com/google/ko/cmd/ko
     - name: Check out code
       uses: actions/checkout@v1
+    - name: Run tests
+      shell: bash
+      run: make build test
     - name: Build using ko
       run: ko publish -L github.com/projectriff/kafka-provisioner/cmd/provisioner
 #    - name: Set up GCloud
