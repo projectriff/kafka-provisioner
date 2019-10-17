@@ -17,25 +17,21 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/Shopify/sarama"
+	"github.com/projectriff/kafka-provisioner/pkg/provisioner/handler"
+	client "github.com/projectriff/kafka-provisioner/pkg/provisioner/kafka"
 	"log"
 	"net/http"
 	"os"
-	"strings"
-)
-
-var (
-	gateway = os.Getenv("GATEWAY")
-	broker  = os.Getenv("BROKER")
 )
 
 func main() {
-
+	gateway := os.Getenv("GATEWAY")
 	if gateway == "" {
 		log.Fatal("Environment variable GATEWAY should contain the host and port of a liiklus gRPC endpoint")
 	}
+	broker := os.Getenv("BROKER")
 	if broker == "" {
 		log.Fatal("Environment variable BROKER should contain the host and port of a Kafka broker")
 	}
@@ -43,77 +39,28 @@ func main() {
 	sarama.Logger = log.New(os.Stdout, "[Sarama] ", log.LstdFlags)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPut {
-			handlePut(w, r)
-		} else {
+		if r.Method != http.MethodPut {
 			w.WriteHeader(http.StatusMethodNotAllowed)
-		}
-	})
-	http.ListenAndServe(":8080", nil)
-}
-
-func handlePut(w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(r.URL.Path[1:], "/")
-	if len(parts) != 2 {
-		w.WriteHeader(http.StatusBadRequest)
-		_, _ = fmt.Fprintf(w, "URLs should be of the form /<namespace>/<stream-name>\n")
-		return
-	}
-
-	config := sarama.NewConfig()
-	config.Version = sarama.V0_11_0_0
-	config.ClientID = "kafka-provisioner"
-	admin, err := sarama.NewClusterAdmin([]string{broker}, config)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = fmt.Fprintf(os.Stderr, "Error connecting to Kafka broker %q: %v\n", broker, err)
-		_, _ = fmt.Fprintf(w, "Error connecting to Kafka broker %q: %v\n", broker, err)
-		return
-	} else {
-		defer func() {
-			if err := admin.Close() ; err != nil {
-				_, _ = fmt.Fprintf(os.Stderr, "Error disconnecting from Kafka broker %q: %v\n", broker, err)
-			}
-		}()
-	}
-
-	// NOTE: choice of underscore as separator is important as it is not allowed in k8s names
-	topicName := fmt.Sprintf("%s_%s", parts[0], parts[1])
-	topicDetail := sarama.TopicDetail{NumPartitions: 1, ReplicationFactor: 1}
-	if metadata, err := admin.DescribeTopics([]string{topicName}); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = fmt.Fprintf(os.Stderr, "Error trying to list topics to see if %q exists: %v\n", topicName, err)
-		_, _ = fmt.Fprintf(w, "Error trying to list topics to see if %q exists: %v\n", topicName, err)
-		return
-	} else if metadata[0].Err == sarama.ErrUnknownTopicOrPartition {
-		if err := admin.CreateTopic(topicName, &topicDetail, false); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			_, _ = fmt.Fprintf(os.Stderr, "Error creating topic %q: %v\n", topicName, err)
-			_, _ = fmt.Fprintf(w, "Error creating topic %q: %v\n", topicName, err)
 			return
 		}
-		w.WriteHeader(http.StatusCreated)
-	} else if metadata[0].Err == sarama.ErrNoError {
-		w.WriteHeader(http.StatusOK)
-	} else {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = fmt.Fprintf(os.Stderr, "Error creating topic %q: %v\n", topicName, err)
-		_, _ = fmt.Fprintf(w, "Error creating topic %q: %v\n", topicName, err)
-		return
-	}
-
-	// Either created or already existed
-	w.Header().Set("Content-Type", "application/json")
-	res := result{Gateway: gateway, Topic: topicName}
-	if err := json.NewEncoder(w).Encode(res); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Failed to write json response: %v", err)
-		return
-	} else {
-		_, _ = fmt.Fprintf(os.Stderr, "Reported successful topic %q\n", topicName)
-	}
+		handleProvisionRequest(broker, gateway, w, r)
+	})
+	_ = http.ListenAndServe(":8080", nil)
 }
 
-type result struct {
-	Gateway string `json:"gateway"`
-	Topic   string `json:"topic"`
+func handleProvisionRequest(broker, gateway string, writer http.ResponseWriter, request *http.Request) {
+	kafkaClient, err := client.NewKafkaClient(broker)
+	if err != nil {
+		writer.WriteHeader(http.StatusInternalServerError)
+		_, _ = fmt.Fprintf(os.Stderr, "Error connecting to Kafka broker %q: %v\n", broker, err)
+		_, _ = fmt.Fprintf(writer, "Error connecting to Kafka broker %q: %v\n", broker, err)
+		return
+	}
+	defer func() {
+		if err := kafkaClient.Close(); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Error disconnecting from Kafka broker %q: %v\n", broker, err)
+		}
+	}()
+	requestHandler := &handler.TopicCreationRequestHandler{KafkaClient: kafkaClient, Gateway: gateway, Writer: os.Stderr}
+	requestHandler.GetHandlerFunc()(writer, request)
 }
