@@ -1,4 +1,4 @@
-package handler_test
+package client_test
 
 import (
 	"testing"
@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestHandler(t *testing.T) {
+func TestKafkaClient(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Handler Suite")
+	RunSpecs(t, "Kafka Client Suite")
 }

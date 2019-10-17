@@ -17,28 +17,46 @@
 package main
 
 import (
+	"fmt"
 	"github.com/projectriff/kafka-provisioner/pkg/provisioner/handler"
+	client "github.com/projectriff/kafka-provisioner/pkg/provisioner/kafka"
 	"log"
 	"net/http"
 	"os"
 )
 
-var (
-	gateway = os.Getenv("GATEWAY")
-	broker  = os.Getenv("BROKER")
-)
-
 func main() {
+	gateway := os.Getenv("GATEWAY")
 	if gateway == "" {
 		log.Fatal("Environment variable GATEWAY should contain the host and port of a liiklus gRPC endpoint")
 	}
+	broker := os.Getenv("BROKER")
 	if broker == "" {
 		log.Fatal("Environment variable BROKER should contain the host and port of a Kafka broker")
 	}
-	creationHandler := &handler.TopicCreationHandler{
-		Gateway: gateway,
-		Broker:  broker,
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		handleCreationRequest(broker, gateway, w, r)
+	})
+	_ = http.ListenAndServe(":8080", nil)
+}
+
+func handleCreationRequest(broker, gateway string, writer http.ResponseWriter, request *http.Request) {
+	kafkaClient, err := client.NewKafkaClient(broker, os.Stdout)
+	if err != nil {
+		writer.WriteHeader(http.StatusInternalServerError)
+		_, _ = fmt.Fprintf(os.Stderr, "Error connecting to Kafka broker %q: %v\n", broker, err)
+		_, _ = fmt.Fprintf(writer, "Error connecting to Kafka broker %q: %v\n", broker, err)
+		return
 	}
-	http.HandleFunc("/", creationHandler.HandleTopicCreationRequest)
-	http.ListenAndServe(":8080", nil)
+	defer func() {
+		if err := kafkaClient.Close(); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Error disconnecting from Kafka broker %q: %v\n", broker, err)
+		}
+	}()
+	requestHandler := &handler.TopicCreationRequestHandler{KafkaClient: kafkaClient, Gateway: gateway, Writer: os.Stderr}
+	requestHandler.GetHandlerFunc()(writer, request)
 }

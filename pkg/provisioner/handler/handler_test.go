@@ -6,61 +6,113 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/projectriff/kafka-provisioner/pkg/provisioner/handler"
+	client "github.com/projectriff/kafka-provisioner/pkg/provisioner/kafka"
+	"github.com/projectriff/kafka-provisioner/pkg/provisioner/kafka/kafkafakes"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 )
 
-var _ = Describe("Provisioner", func() {
+var _ = Describe("Provisioner HTTP Handler", func() {
 
 	const (
+		gateway                = "liiklus.example.com"
 		existingTopicNamespace = "some-namespace"
 		existingTopicName      = "some-topic"
 	)
 
 	var (
-		broker              *sarama.MockBroker
-		creationHandlerFunc *handler.TopicCreationHandler
+		kafkaTopicName      = fmt.Sprintf("%s_%s", existingTopicNamespace, existingTopicName)
 		responseRecorder    *httptest.ResponseRecorder
+		fakeKafkaClient     *kafkafakes.FakeKafkaClient
+		creationHandlerFunc http.HandlerFunc
+		request             *http.Request
 	)
 
 	BeforeEach(func() {
-		t := GinkgoT()
-		brokerId := int32(1)
-		By("Given a test broker")
-		broker = sarama.NewMockBroker(t, brokerId)
-
-		existingTopic := fmt.Sprintf("%s_%s", existingTopicNamespace, existingTopicName)
-		By(fmt.Sprintf("With the existing topic %s", existingTopic))
-		broker.SetHandlerByMap(map[string]sarama.MockResponse{
-			"MetadataRequest": sarama.NewMockMetadataResponse(t).
-				SetController(broker.BrokerID()).
-				SetBroker(broker.Addr(), broker.BrokerID()).
-				SetLeader(existingTopic, 0, broker.BrokerID()),
-		})
-
-		By("Given the provisioner pointing to the test broker")
-		creationHandlerFunc = &handler.TopicCreationHandler{
-			Gateway: "liiklus.example.com",
-			Broker:  broker.Addr(),
-		}
 		responseRecorder = httptest.NewRecorder()
+		fakeKafkaClient = &kafkafakes.FakeKafkaClient{}
+		request = putRequest(fmt.Sprintf("/%s/%s", existingTopicNamespace, existingTopicName))
+		creationHandler := &handler.TopicCreationRequestHandler{
+			KafkaClient: fakeKafkaClient,
+			Gateway:     gateway,
+			Writer:      ioutil.Discard}
+		creationHandlerFunc = creationHandler.GetHandlerFunc()
 	})
 
-	AfterEach(func() {
-		broker.Close()
+	It("returns 200 if the topic already exists", func() {
+		fakeKafkaClient.TopicExistsReturns(true, nil)
+
+		creationHandlerFunc.ServeHTTP(responseRecorder, request)
+
+		Expect(responseRecorder.Code).To(Equal(http.StatusOK),
+			fmt.Sprintf("Expected %d after topic creation request but got %d", http.StatusOK, responseRecorder.Code))
+		Expect(responseRecorder.Body.String()).To(MatchJSON(
+			fmt.Sprintf("{"+
+				"	\"gateway\":\"%s\","+
+				"	\"topic\":\"%s_%s\""+
+				"}", gateway, existingTopicNamespace, existingTopicName)))
 	})
 
-	Context("provisions topics on demand", func() {
-		It("returns 200 if the topic already exists", func() {
-			path := fmt.Sprintf("/%s/%s", existingTopicNamespace, existingTopicName)
-			request := httptest.NewRequest("PUT", path, nil)
+	It("returns 201 if the topic is successfully created", func() {
+		fakeKafkaClient.TopicExistsReturns(false, nil)
+		fakeKafkaClient.CreateTopicReturns(nil)
 
-			http.HandlerFunc(creationHandlerFunc.HandleTopicCreationRequest).ServeHTTP(responseRecorder, request)
+		creationHandlerFunc.ServeHTTP(responseRecorder, request)
 
-			expectedCode := http.StatusOK
-			actualCode := responseRecorder.Code
-			Expect(actualCode).To(Equal(expectedCode),
-				fmt.Sprintf("Expected %d after topic creation request but got %d", expectedCode, actualCode))
-		})
+		Expect(responseRecorder.Code).To(Equal(http.StatusCreated),
+			fmt.Sprintf("Expected %d after topic creation request but got %d", http.StatusCreated, responseRecorder.Code))
+		Expect(responseRecorder.Body.String()).To(MatchJSON(
+			fmt.Sprintf("{"+
+				"	\"gateway\":\"%s\","+
+				"	\"topic\":\"%s_%s\""+
+				"}", gateway, existingTopicNamespace, existingTopicName)))
+	})
+
+	It("returns 400 if the the topic is not properly specified", func() {
+		creationHandlerFunc.ServeHTTP(responseRecorder, putRequest("/invalid-topic"))
+
+		Expect(responseRecorder.Code).To(Equal(http.StatusBadRequest),
+			fmt.Sprintf("Expected %d after topic creation request but got %d", http.StatusBadRequest, responseRecorder.Code))
+		Expect(responseRecorder.Body.String()).
+			To(Equal("URLs should be of the form /<namespace>/<stream-name>\n"))
+	})
+
+	It("returns 500 if an unexpected error occurred while listing topics", func() {
+		fakeKafkaClient.TopicExistsReturns(false, &client.KafkaError{GeneralError: fmt.Errorf("oopsie")})
+
+		creationHandlerFunc.ServeHTTP(responseRecorder, request)
+
+		Expect(responseRecorder.Code).To(Equal(http.StatusInternalServerError),
+			fmt.Sprintf("Expected %d after topic creation request but got %d", http.StatusInternalServerError, responseRecorder.Code))
+		Expect(responseRecorder.Body.String()).
+			To(Equal("Error trying to list topics to see if \"" + kafkaTopicName + "\" exists: oopsie\n"))
+	})
+
+	It("returns 500 if a server error occurred while listing topics", func() {
+		fakeKafkaClient.TopicExistsReturns(false, &client.KafkaError{KError: sarama.ErrInvalidPartitions})
+
+		creationHandlerFunc.ServeHTTP(responseRecorder, request)
+
+		Expect(responseRecorder.Code).To(Equal(http.StatusInternalServerError),
+			fmt.Sprintf("Expected %d after topic creation request but got %d", http.StatusInternalServerError, responseRecorder.Code))
+		Expect(responseRecorder.Body.String()).
+			To(Equal("Error trying to list topics to see if \"" + kafkaTopicName + "\" exists: kafka server: Number of partitions is invalid.\n"))
+	})
+
+	It("returns 500 if an error occurred while creating a topic", func() {
+		fakeKafkaClient.TopicExistsReturns(false, nil)
+		fakeKafkaClient.CreateTopicReturns(fmt.Errorf("oopsie"))
+
+		creationHandlerFunc.ServeHTTP(responseRecorder, request)
+
+		Expect(responseRecorder.Code).To(Equal(http.StatusInternalServerError),
+			fmt.Sprintf("Expected %d after topic creation request but got %d", http.StatusInternalServerError, responseRecorder.Code))
+		Expect(responseRecorder.Body.String()).
+			To(Equal("Error creating topic \"" + kafkaTopicName + "\": oopsie\n"))
 	})
 })
+
+func putRequest(path string) *http.Request {
+	return httptest.NewRequest("PUT", path, nil)
+}
