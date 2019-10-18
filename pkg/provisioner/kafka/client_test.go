@@ -5,13 +5,12 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	client "github.com/projectriff/kafka-provisioner/pkg/provisioner/kafka"
-	"io/ioutil"
 )
 
 var _ = Describe("Kafka Client", func() {
 	var (
-		broker       *sarama.MockBroker
-		kafkaClient  client.KafkaClient
+		broker      *sarama.MockBroker
+		kafkaClient client.KafkaClient
 	)
 
 	AfterEach(func() {
@@ -62,7 +61,7 @@ var _ = Describe("Kafka Client", func() {
 })
 
 func newKafkaClient(broker *sarama.MockBroker) client.KafkaClient {
-	kClient, err := client.NewKafkaClient(broker.Addr(), ioutil.Discard)
+	kClient, err := client.NewKafkaClient(broker.Addr())
 	Expect(err).NotTo(HaveOccurred())
 	return kClient
 }

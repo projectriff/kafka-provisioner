@@ -18,6 +18,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/Shopify/sarama"
 	"github.com/projectriff/kafka-provisioner/pkg/provisioner/handler"
 	client "github.com/projectriff/kafka-provisioner/pkg/provisioner/kafka"
 	"log"
@@ -45,13 +46,14 @@ func main() {
 }
 
 func handleCreationRequest(broker, gateway string, writer http.ResponseWriter, request *http.Request) {
-	kafkaClient, err := client.NewKafkaClient(broker, os.Stdout)
+	kafkaClient, err := client.NewKafkaClient(broker)
 	if err != nil {
 		writer.WriteHeader(http.StatusInternalServerError)
 		_, _ = fmt.Fprintf(os.Stderr, "Error connecting to Kafka broker %q: %v\n", broker, err)
 		_, _ = fmt.Fprintf(writer, "Error connecting to Kafka broker %q: %v\n", broker, err)
 		return
 	}
+	sarama.Logger = log.New(os.Stdout, "[Sarama] ", log.LstdFlags)
 	defer func() {
 		if err := kafkaClient.Close(); err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Error disconnecting from Kafka broker %q: %v\n", broker, err)

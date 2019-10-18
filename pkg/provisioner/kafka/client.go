@@ -2,8 +2,6 @@ package client
 
 import (
 	"github.com/Shopify/sarama"
-	"io"
-	"log"
 )
 
 //go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 . KafkaClient
@@ -14,11 +12,10 @@ type KafkaClient interface {
 }
 
 type kafkaClient struct {
-	Admin   sarama.ClusterAdmin
+	Admin sarama.ClusterAdmin
 }
 
-func NewKafkaClient(brokerAddress string, logWriter io.Writer) (KafkaClient, error) {
-	sarama.Logger = log.New(logWriter, "[Sarama] ", log.LstdFlags)
+func NewKafkaClient(brokerAddress string) (KafkaClient, error) {
 	config := sarama.NewConfig()
 	config.Version = sarama.V0_11_0_0
 	config.ClientID = "kafka-provisioner"
@@ -27,7 +24,7 @@ func NewKafkaClient(brokerAddress string, logWriter io.Writer) (KafkaClient, err
 		return nil, err
 	}
 	return &kafkaClient{
-		Admin:   admin,
+		Admin: admin,
 	}, nil
 }
 
