@@ -17,9 +17,6 @@ build: gen-mocks $(OUTPUT) ## build the project binary
 test: ## run the project tests
 	go test -v ./...
 
-install: build ## copy the binary to GOBIN
-	cp $(OUTPUT) $(GOBIN)
-
 $(OUTPUT): $(GO_SOURCES)
 	go build -v -o $(OUTPUT) cmd/provisioner/main.go
 

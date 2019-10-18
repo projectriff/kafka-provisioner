@@ -63,10 +63,7 @@ var _ = Describe("Provisioner HTTP Handler", func() {
 		Expect(responseRecorder.Code).To(Equal(http.StatusCreated),
 			fmt.Sprintf("Expected %d after topic creation request but got %d", http.StatusCreated, responseRecorder.Code))
 		Expect(responseRecorder.Body.String()).To(MatchJSON(
-			fmt.Sprintf("{"+
-				"	\"gateway\":\"%s\","+
-				"	\"topic\":\"%s_%s\""+
-				"}", gateway, existingTopicNamespace, existingTopicName)))
+			fmt.Sprintf(`{"gateway": "%s", "topic": "%s_%s"}`, gateway, existingTopicNamespace, existingTopicName)))
 	})
 
 	It("returns 400 if the the topic is not properly specified", func() {
