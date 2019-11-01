@@ -3,7 +3,7 @@ module github.com/projectriff/kafka-provisioner
 go 1.12
 
 require (
-	github.com/Shopify/sarama v1.24.0
+	github.com/Shopify/sarama v1.24.1
 	github.com/golang/protobuf v1.3.2 // indirect
 	github.com/klauspost/cpuid v1.2.1 // indirect
 	github.com/onsi/ginkgo v1.10.2
