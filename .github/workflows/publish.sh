@@ -16,7 +16,7 @@ readonly slug=${version}-${git_timestamp}-${GITHUB_SHA:0:16}
 
 publishImage() {
   local tag=$1
-  local source=ko.local/provisioner-97dd22e72aed3201586a126a023b55db:latest
+  local source=ko.local/provisioner-1c7683ca89e38e0851afedc70fc91440:latest
   local destination=gcr.io/projectriff/kafka-provisioner/provisioner:${tag}
 
   docker tag ${source} ${destination}
